@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>BreachRadar - Landing Page</title>
+        <link rel="stylesheet" href="./style.css">
+    </head>
+    <body>
+            <div id="container"></div>
+
+            <div class="website">
+                <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.min.js"></script>
+                <script id="vertexShader" type="x-shader/x-vertex">
+                    void main() {
+                        gl_Position = vec4( position, 1.0 );
+                    }
+                </script>
+                <script id="fragmentShader" type="x-shader/x-fragment">
+                uniform vec2 u_resolution;
+                uniform vec2 u_mouse;
+                uniform float u_time;
+                uniform sampler2D u_noise;
+                uniform sampler2D u_buffer;
+                uniform bool u_renderpass;
+                    
+                const float blurMultiplier = 0.95;
+                const float circleSize = .25;
+                const float blurStrength = .98;
+                const float threshold = .5;
+                const float scale = 4.;
+                
+                #define _fract true
+                
+                #define PI 3.141592653589793
+                #define TAU 6.283185307179586
+
+                vec2 hash2(vec2 p)
+                {
+                    vec2 o = texture2D( u_noise, (p+0.5)/256.0, -100.0 ).xy;
+                    return o;
+                }
+                
+                vec3 hsb2rgb( in vec3 c ){
+                    vec3 rgb = clamp(abs(mod(c.x*6.0+vec3(0.0,4.0,2.0),
+                                            6.0)-3.0)-1.0,
+                                    0.0,
+                                    1.0 );
+                    rgb = rgb*rgb*(3.0-2.0*rgb);
+                    return c.z * mix( vec3(1.0), rgb, c.y);
+                }
+                
+                vec3 domain(vec2 z){
+                    return vec3(hsb2rgb(vec3(atan(z.y,z.x)/TAU,1.,1.)));
+                }
+                vec3 colour(vec2 z) {
+                    return domain(z);
+                }
+
+                
+                #define pow2(x) (x * x)
+
+                const int samples = 8;
+                const float sigma = float(samples) * 0.25;
+
+                float gaussian(vec2 i) {
+                    return 1.0 / (2.0 * PI * pow2(sigma)) * exp(-((pow2(i.x) + pow2(i.y)) / (2.0 * pow2(sigma))));
+                }
+
+                vec3 hash33(vec3 p){ 
+                    
+                    float n = sin(dot(p, vec3(7, 157, 113)));    
+                    return fract(vec3(2097152, 262144, 32768)*n); 
+                }
+
+                vec3 blur(sampler2D sp, vec2 uv, vec2 scale) {
+                    vec3 col = vec3(0.0);
+                    float accum = 0.0;
+                    float weight;
+                    vec2 offset;
+                    
+                    for (int x = -samples / 2; x < samples / 2; ++x) {
+                        for (int y = -samples / 2; y < samples / 2; ++y) {
+                            offset = vec2(x, y);
+                            weight = gaussian(offset);
+                            col += texture2D(sp, uv + scale * offset).rgb * weight;
+                            accum += weight;
+                        }
+                    }
+                    
+                    return col / accum;
+                }
+                void main() {
+                    vec2 uv = (gl_FragCoord.xy - 0.5 * u_resolution.xy) / u_resolution.y;
+                    uv *= scale;
+                    vec2 mouse = u_mouse * scale;
+                    
+                    vec2 ps = vec2(1.0) / u_resolution.xy;
+                    vec2 sample = gl_FragCoord.xy / u_resolution.xy;
+                    vec2 o = mouse*.2+vec2(.65, .5);
+                    float d = .98;
+                    sample = d * (sample - o);
+                    sample += o;
+                    sample += vec2(sin((u_time+uv.y * .5)*10.)*.001, -.00);
+                    
+                    vec3 fragcolour;
+                    vec4 tex;
+                    if(u_renderpass) {
+                    tex = vec4(blur(u_buffer, sample, ps*blurStrength) * blurMultiplier, 1.);
+                    float df = length(mouse - uv);
+                    fragcolour = vec3( smoothstep( circleSize, 0., df ) );
+                    } else {
+                    tex = texture2D(u_buffer, sample, 2.) * .98;
+                    tex = vec4(
+                        smoothstep(0.0, threshold - fwidth(tex.x), tex.x),
+                        smoothstep(0.2, threshold - fwidth(tex.y) + .2, tex.y),
+                        smoothstep(-0.05, threshold - fwidth(tex.z) - .2, tex.z),
+                        1.);
+                    vec3 n = hash33(vec3(uv, u_time*.1));
+                    tex.rgb += n * .2 - .1;
+                    // tex = vec4(
+                    //   smoothstep(0.0, threshold - fwidth(tex.x), tex.x),
+                    //   smoothstep(0.2, threshold - fwidth(tex.x) + .2, tex.x),
+                    //   smoothstep(-0.05, threshold - fwidth(tex.x) - .2, tex.x),
+                    //   1.);
+                    }
+                    // vec4 tex = texture2D(u_buffer, sample, 2.) * .98;
+                    
+                    
+
+                    gl_FragColor = vec4(fragcolour,1.0);
+                    gl_FragColor += tex;
+                    
+                }
+                </script>
+
+
+                <div id="container" touch-action="none"></div>
+            </div>
+
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/88/three.min.js"></script>
+            <script src="script.js"></script>
+                    
+
+
+
+        <header class="site-header">
+            <nav class="navbar">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <img src="images/sheild.png" alt="logo">
+                    </div>
+                    <h2>Breach<span>Radar</span></h2>
+                </div>
+                <div class="main-nav">
+                    <ul>
+                        <li><a href="#hero">Home</a></li>
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#how-it-works">How it works</a></li>
+                       
+                        <li><a href="#pricing">Pricing</a></li>
+                        <li><a href="#cta-section">Resources</a></li>
+                    </ul>
+                </div>
+                
+                <div class="header-actions">
+                    <a href="#" class="login">Log In</a>
+                    <button class="check-btn">Check Exposure</button>
+                </div>
+            </nav>
+        </header>
+
+        
+        <section class="hero" id="hero">
+            <div class="hero-img">
+                <img src="/images/hero-background.png">
+                <div class="hero-left">
+                    <h1>Stay Ahead of <br> Data Breaches.<br>
+                    <span>Stay Protected.</span>
+                    </h1>
+                    <p>BreachRadar monitors billions of data points across the web
+                        to identify threats, leaked credentials, and exposed personal information
+                        before it's too late.
+                    </p>
+                </div>
+                <div>
+                    <button class="primary-button">Start 14-days free trial</button>
+                    <button class="secondary-button">View Monitoring Plans</button>
+                </div>
+                <div class="features">
+                    <div>
+                        
+                        <p>⭐️ No Credit Card Required</p>
+                    </div>
+                    
+                    <div>
+                        
+                        <p>⭐️ 14 Days Free Trial</p>
+                    </div>
+                    <div>
+                        
+                        <p>⭐️ Cancel Anytime</p>
+                    </div>
+                </div>
+            
+
+                
+                    <div class="stats-div1">
+                        <img src="images/scanner.png">
+                        <div class="stats-para1">
+                            <h2>158M+</h2>
+                            <p>Data Points Scanned Daily</p>
+                        </div>
+                    </div>
+                    <div class="stats-div2">
+                        <img src="images/breach analyze.png">
+                        <div class="stats-para2">
+                            <h2>500K+</h2>
+                            <p>Threat Sources Monitored</p>
+                        </div>
+                    </div>
+                    <div class="stats-div3">
+                        <img src="images/reliability.png">
+                        <div class="stats-para3">
+                            <h2>99.9%</h2>
+                            <p>Uptime & Reliability</p>
+                        </div>
+                    </div>
+                    <div class="stats-div4">
+                        <img src="images/data-leak.png">
+                        <div class="stats-para4">
+                            <h2>1.5B+</h2>
+                            <p>Breach Records Analyzed</p>
+                        </div>
+                    </div>
+                    <div class="stats-div5">
+                        <img src="images/personal-data.png">
+                        <div class="stats-para5">
+                            <h2>10k+</h2>
+                            <p>Organizations Protected</p>
+                        </div>
+                    </div>
+                    <div class="stats-div6">
+                        <img src="images/research.png">
+                        <div class="stats-para6">
+                            <h2>24/7</h2>
+                            <p>Continuous Monitoring</p>
+                        </div>
+                    </div>
+                
+            </div>
+            
+        </section>
+
+        <section id="features">
+
+            
+
+            <div class="features-section">
+               
+                <div class="features-eyebrow">
+                   <span> <p>POWERFUL PROTECTION</p> </span>
+                    <h2>Everything You Need To Stay Secure</h2>
+                    <p>Advanced tools and real-time intelligence to protect your digital identity
+                        and sensitive information.
+                    </p>
+                </div>
+                <div class="feature-grid">
+
+                    <div class="feature-card">
+                        <img src="images/dwm.png">
+                        <h3> Breach Monitoring</h3>
+                        <p>Continuously scan the dark web forums 
+                            and pasts sites for leaked data.
+                        </p>
+                        <a href="#">Learn More → </a>
+                    </div>
+
+
+
+                    <div class="feature-card">
+                        <img src="images/notification.png">
+                        <h3> Real-Time Alerts</h3>
+                        <p>Get instant notification when your data is found in a breach.</p>
+                        <a href="#">Learn More → </a>
+                    </div>
+
+                    <div class="feature-card">
+                        <img src="images/ip.png">
+                        <h3> Identity Protection</h3>
+                        <p>Monitor your personal information and identity theft
+                        </p>
+                        <a href="#">Learn More → </a>
+                    </div>
+
+                    <div class="feature-card">
+                        <img src="images/dr.png">
+                        <h3>Detailed Reports</h3>
+                        <p>Access compresensive reports with actionable security insights.
+                        </p>
+                        <a href="#">Learn More → </a>
+                    </div>
+
+                    <div class="feature-card">
+                        <img src="images/dre.png">
+                        <h3> Data Removal</h3>
+                        <p>Guidance on how to remove your data from exposed seurces.
+                        </p>
+                        <a href="#">Learn More → </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section id="how-it-works">
+            <div class="working">
+                <div class="working-eyebrow">
+                    <span><p>HOW BREACHRADAR WORKS</p></span>
+                    <h2>Simple steps to Security</h2>
+                    <p>Three Simple steps to monitor, detect and protect your data.</p>
+                </div>
+                <div class="working-steps">
+                    <div class="step">
+                        <h1>01</h1>
+                        <h2>Enter your information</h2>
+                        <p>Provide your email, phone number, or other details you want to monitor.</p>
+                    </div>
+
+                    <div class="step">
+                        <h1>02</h1>
+                        <h2>We Scan & Monitor</h2>
+                        <p>Our system scans billion of records across the web and dark web.</p>
+                    </div>
+
+                    <div class="step">
+                        <h1>03</h1>
+                        <h2>Get Alerts & Take Action</h2>
+                        <p>Receive alerts if your data is found d followur protection steps.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+
+        <section id="pricing">
+            <p class="eyebrow-center">
+                MONITORING PLANS
+            </p>
+            <h2>Choose the Right Plan. <br>
+                <span>Stay Protected,</span>
+                Always.
+            </h2>
+                <p class="pricing-subtitle">
+                    Flexible breach and leak monitoring plans for individuals, security teams, and enterprises.
+                </p>
+                <div class="billing-toggle">
+                    <span>Billed Monthly</span>
+
+                    <!Outer Element> 
+                    <label class="switch">
+                        <input type="checkbox">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="span2"> Billed Annually </span>
+                    <em class="green">Save up to 20%</em>
+                </div>
+
+                <div class="price-div">
+                    <article class="price-card">
+                        <h3>Starter</h3>
+                        <p>Ideal for individuals and small teams getting started with threat monitoring.</p>
+                        <strong>$39</strong>
+                        <span>/month</span>
+                        <small>Billed annually (save 20%)</small>
+                        <a class="btn-btn" href="#">Start 14 days free trial</a>
+                        <ul>
+                            <li>✔️ Dark Web Monitoring</li>
+                            <li>✔️ Upto 3 users</li>
+                            <li>✔️ 5 Data Sources</li>
+                            <li>✔️ Breach Alerts (Email) </li>
+                            <li>✔️ Basic Reports </li>
+                            <li>✔️ Standard Reports</li>
+                        </ul>
+                    </article>
+
+                    <article class="price-card-popular">
+                        <div class="popular">MOST POPULAR</div>
+                        <h3>Pro</h3>
+                        <p>Advanced threat intelligence and monitoring for growing teams.</p>
+                        <strong>$99</strong>
+                        <span>/month</span>
+                        <small>Billed annually (save 20%)</small>
+                        <a class="btn-btn" href="#">Start 14 days free trial</a>
+                        <ul>
+                            <li>✔️ Everything in Starter</li>
+                            <li>✔️ Upto 10 users</li>
+                            <li>✔️ 25+ Data Sources</li>
+                            <li>✔️ Breach Alerts (Email,SMS) </li>
+                            <li>✔️ Advanced Reports & Dashboard</li>
+                            <li>✔️ API Access</li>
+                            <li>✔️ Priority Support</li>
+                        </ul>
+                    </article>
+
+                    <article class="price-card">
+                        <h3>Business</h3>
+                        <p>Comprehensive protection and visibility for organizations.</p>
+                        <strong>$249</strong>
+                        <span>/month</span>
+                        <small>Billed annually (save 20%)</small>
+                        <a class="btn-btn" href="#">Start 14 days free trial</a>
+                        <ul>
+                            <li>✔️ Everything in Pro</li>
+                            <li>✔️ Upto 50 users</li>
+                            <li>✔️ 100+ Data Sources</li>
+                            <li>✔️ Real time Alerts (All Channels) </li>
+                            <li>✔️ Threat Intelligence Feeds</li>
+                            <li>✔️ Custom Reports & Integrations</li>
+                            <li>✔️ Dedicated Account Manager</li>
+                            <li>✔️ 24/7 Priority Support</li>
+                        </ul>
+                    </article>
+
+                    <article class="price-card">
+                        <h3>Enterprise</h3>
+                        <p>Custom solutions with advanced security for large enterprises.</p>
+                        <strong>Custom</strong>
+                        
+                        <small>Tailored to your organization's needs</small>
+                        <a class="btn-btn" href="#">Contact Sales</a>
+                        <ul>
+                            <li>✔️ Everything in Business</li>
+                            <li>✔️ Unlimited Users</li>
+                            <li>✔️ Unlimited Data Sources</li>
+                            <li>✔️ Custom Integrations </li>
+                            <li>✔️ On-Premise / Private Cloud</li>
+                            <li>✔️ SLA & Compliance Support</li>
+                            <li>✔️ Dedicated Threat Analyst</li>
+                            <li>✔️ 24/7 Premium Support</li>
+                        </ul>
+                    </article>
+                </div>
+        </section>
+        <section id="cta-section">
+            <div class="cta">
+                <div class="cta-info">
+                    <h2>Don't wait until it's too late</h2>
+                    <p>Join thousands of people who trust BreachRadar to keep their
+                        data safe. <br> Start your free scan today.
+                    </p>
+                </div>
+                <div class="cta-action">
+                    <button> Start your free scan now</button>
+                    <p>No Credit-Card Required</p>
+                </div>
+            </div>
+        </section>
+
+        <footer id="foo">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <a class="brand" href="#">                   
+                        <img src="/images/sheild.png" alt="logo">
+                        <span>Breach</span><span>Radar</span>
+                    </a>
+                    <p>Breach and leak intelligence system that helps organizations detect exposed data,
+                         monitor dark web mentions, and respond in real-time.
+                    </p>
+                    <div class="socials">
+                        <img src="/images/linkedin.png" alt="LinkedIn">
+                        <img src="/images/twitter.png" alt="Twitter">
+                        <img src="/images/instagram.png" alt="Instagram">
+                        <img src="/images/youtube.png" alt="YouTube">
+                    </div>
+                </div>
+                <div class="footer">
+                    <h4>BREACH MONITOR</h4>
+                    <a class="footer-link" href="#">Leak Detection</a>
+                    <a class="footer-link" href="#">Monitoring Plans</a>
+                    <a class="footer-link" href="#">Integrations</a>
+                    <a class="footer-link" href="#">Response Use Cases</a>
+                    <a class="footer-link" href="#">Data Sources</a>
+                </div>
+                <div class="footer">
+                    <h4>INTEL HUB</h4>
+                    <a class="footer-link" href="#">Docs</a>
+                    <a class="footer-link" href="#">API Docs</a>
+                    <a class="footer-link" href="#">Breach Reports</a>
+                    <a class="footer-link" href="#">Leak Guides</a>
+                    <a class="footer-link" href="#">Help Center</a>
+                </div>
+                <div class="footer">
+                    <h4>TRUST</h4>
+                    <a class="footer-link" href="#">About BreachRadar</a>
+                    <a class="footer-link" href="#">Analyst Team</a>
+                    <a class="footer-link" href="#">Partners</a>
+                    <a class="footer-link" href="#">Research</a>
+                    <a class="footer-link" href="#">Contact Us</a>
+                </div>
+                <div class="footer">
+                    <h4>LEGAL</h4>
+                    <a class="footer-link" href="#">Privacy Policy</a>
+                    <a class="footer-link" href="#">Terms of Service</a>
+                    <a class="footer-link" href="#">Security</a>
+                    <a class="footer-link" href="#">Compliance</a>
+                    <a class="footer-link" href="#">Cookies</a>
+                </div>
+                <form class="footer-form">
+                    <h3>Leak Alert</h3>
+                    <p>Subscribe to get breach intelligence, dark web trends, and exposure response updates.</p>
+                    <label>
+                        <input type="email" id="email-id" placeholder="Enter your Email">
+                        <button class="submit">
+                            →
+                        </button>
+                    </label>
+                </form>
+            </div>
+            <div class="footer-bottom">
+                <p>© 2025 BreachRadar.io. All rights reserved.</p>
+                <div class="footer-bottom-div">
+                    <a href="#">Status Page</a>
+                    <a href="#">Trust Center</a>
+                </div>
+            </div>
+        </footer>
+    </body>
+</html>
